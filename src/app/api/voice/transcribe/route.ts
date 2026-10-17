@@ -3,7 +3,6 @@ import { getCurrentUser } from '@/lib/auth';
 import { sarvamConfigured, speechToText, VOICE_LANGS } from '@/lib/sarvam';
 import { tooMany } from '@/lib/rateLimit';
 
-export const runtime = 'nodejs';
 const MAX_BYTES = 5 * 1024 * 1024;
 
 // Browser recording (webm/mp4/ogg) -> text, using Sarvam speech-to-text.

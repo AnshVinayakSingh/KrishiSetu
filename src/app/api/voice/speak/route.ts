@@ -3,7 +3,6 @@ import { getCurrentUser } from '@/lib/auth';
 import { sarvamConfigured, textToSpeech, ttsSupported } from '@/lib/sarvam';
 import { tooMany } from '@/lib/rateLimit';
 
-export const runtime = 'nodejs';
 
 // Text -> spoken audio (WAV), using Sarvam Bulbul.
 export async function POST(req: NextRequest) {
