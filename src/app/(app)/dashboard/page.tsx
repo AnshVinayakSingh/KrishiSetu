@@ -7,7 +7,6 @@ import MobileMenu from '@/components/layout/MobileMenu';
 import Footer from '@/components/layout/Footer';
 import WeatherCard from '@/components/dashboard/WeatherCard';
 import MandiPrices from '@/components/dashboard/MandiPrices';
-import AiChatWidget from '@/components/dashboard/AiChatWidget';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLocation } from '@/context/LocationContext';
 import { useUser } from '@/context/UserContext';
@@ -42,7 +41,6 @@ export default function DashboardPage() {
       </div>
 
       <Footer />
-      <AiChatWidget />
     </div>
   );
 }

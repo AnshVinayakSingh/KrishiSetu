@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LocationProvider } from '@/context/LocationContext';
 import { UserProvider, type AppUser } from '@/context/UserContext';
 import LocationGate from '@/components/common/LocationGate';
+import ChatDock from '@/components/assistant/ChatDock';
 
 // 1) session check against the database, 2) location permission gate. Nothing renders until both pass.
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -20,7 +21,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <UserProvider user={user}>
       <LocationProvider>
-        <LocationGate>{children}</LocationGate>
+        <LocationGate>
+          {children}
+          <ChatDock />
+        </LocationGate>
       </LocationProvider>
     </UserProvider>
   );
