@@ -6,6 +6,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import MobileMenu from '@/components/layout/MobileMenu';
 import Footer from '@/components/layout/Footer';
 import WeatherCard from '@/components/dashboard/WeatherCard';
+import PolicyBanner from '@/components/layout/PolicyBanner';
 import MandiPrices from '@/components/dashboard/MandiPrices';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLocation } from '@/context/LocationContext';
@@ -28,6 +29,7 @@ export default function DashboardPage() {
       <div className="flex-1 max-w-7xl w-full mx-auto flex">
         <Sidebar />
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-10 space-y-6">
+          <PolicyBanner />
           <div className="pb-4 border-b border-[#E2E8DF]">
             <h1 className="text-2xl font-black text-[#14532D] tracking-tight">
               {hi ? `नमस्ते${userName ? `, ${userName}` : ''}` : `Welcome${userName ? `, ${userName}` : ''}`}

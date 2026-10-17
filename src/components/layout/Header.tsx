@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLocation } from '@/context/LocationContext';
-import PolicyBanner from './PolicyBanner';
 import { Sprout, Languages, MapPin, Bell, Menu, X } from 'lucide-react';
 
 interface HeaderProps {
@@ -118,7 +117,6 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
         </div>
       </div>
     </header>
-    <PolicyBanner />
     </>
   );
 }

@@ -3,7 +3,7 @@ import { db } from './db';
 
 export type ChatMode = 'chat' | 'voice';
 // Only the newest KEEP chats and the newest KEEP voice talks are backed up per user; older ones are removed automatically.
-export const KEEP = 5;
+export const KEEP = 30;
 
 interface ConvDoc { _id: string; userId: string; title: string; mode?: ChatMode; createdAt: Date; updatedAt: Date }
 interface MsgDoc { conversationId: string; role: 'user' | 'assistant'; content: string; lang: string; createdAt: Date }
@@ -58,7 +58,7 @@ export async function deleteConversation(convId: string) {
   await d.collection<MsgDoc>('messages').deleteMany({ conversationId: convId });
 }
 
-// Everything that is currently backed up (last KEEP chats + last KEEP voice talks) with all messages.
+// Everything that is currently backed up (recent chats and voice talks) with all messages.
 export async function backupFor(userId: string) {
   const out: Record<ChatMode, { id: string; title: string; updatedAt: Date; messages: { role: string; content: string; lang: string; createdAt: Date }[] }[]> = { chat: [], voice: [] };
   for (const mode of ['chat', 'voice'] as ChatMode[]) {
