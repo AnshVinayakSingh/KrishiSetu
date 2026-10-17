@@ -6,8 +6,9 @@ import { MongoClient, type Db } from 'mongodb';
 const g = globalThis as unknown as { __ksdb?: Promise<Db> };
 
 async function ensureIndexes(d: Db) {
+  await d.collection('users').dropIndex('phone_1').catch(() => {}); // old phone-based unique index (login is by email now)
   await Promise.all([
-    d.collection('users').createIndex({ phone: 1 }, { unique: true }),
+    d.collection('users').createIndex({ email: 1 }, { unique: true }),
     d.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }), // auto-delete expired
     d.collection('conversations').createIndex({ userId: 1, updatedAt: -1 }),
     d.collection('messages').createIndex({ conversationId: 1, createdAt: 1 }),

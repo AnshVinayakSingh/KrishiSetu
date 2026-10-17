@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
@@ -11,6 +12,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const { t } = useLanguage();
   const router = useRouter();
   const signup = mode === 'signup';
+  const [show, setShow] = useState(false);
   const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -19,7 +21,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const bad = (k: string) => setMsg({ text: t(k), bad: true });
     if (signup) {
       if (v.name.trim().length < 2) return bad('lpErrName');
-      if (!/^[6-9]\d{9}$/.test(v.phone)) return bad('lpErrPhone');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) return bad('lpErrEmail');
       if (v.pw.length < 6) return bad('lpErrPass');
     }
     try {
@@ -28,10 +30,10 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(v),
       });
-      const d = await res.json();
-      if (!res.ok) return bad(d.error ?? 'lpErrWrong');
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return bad(d.error ?? 'lpErrServer');
     } catch {
-      return bad('lpErrWrong');
+      return bad('lpErrServer');
     }
     setMsg({ text: t('lpOk'), bad: false });
     setTimeout(() => router.push('/dashboard'), 600);
@@ -46,8 +48,8 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           <input name="name" autoComplete="name" className={field} />
         </label>
       )}
-      <label className="block mb-4 text-sm font-semibold">{t('lpPhone')}
-        <input name="phone" type="tel" inputMode="numeric" maxLength={10} autoComplete="tel" className={field} />
+      <label className="block mb-4 text-sm font-semibold">{t('lpEmail')}
+        <input name="email" type="email" autoComplete="email" className={field} />
       </label>
       {signup && (
         <label className="block mb-4 text-sm font-semibold">{t('lpRole')}
@@ -58,7 +60,17 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         </label>
       )}
       <label className="block mb-4 text-sm font-semibold">{t('lpPass')}
-        <input name="pw" type="password" autoComplete={signup ? 'new-password' : 'current-password'} className={field} />
+        <div className="relative">
+          <input name="pw" type={show ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} className={`${field} pr-11`} />
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            aria-label={show ? t('lpHide') : t('lpShow')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 mt-0.5 text-[#66746A] hover:text-[#14532D]"
+          >
+            {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+          </button>
+        </div>
       </label>
       {msg && <p role="alert" className={`mb-4 text-sm font-semibold ${msg.bad ? 'text-[#DC2626]' : 'text-[#16A34A]'}`}>{msg.text}</p>}
       <button className="w-full rounded-lg bg-[#14532D] text-white font-semibold py-3 hover:bg-[#123B2A] focus:outline-none focus:ring-2 focus:ring-[#86B96B]">

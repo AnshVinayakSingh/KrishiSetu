@@ -5,11 +5,11 @@ import { db } from './db';
 const COOKIE = 'ks_session';
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export interface PublicUser { id: string; name: string; phone: string; role: string; state: string; district: string }
-export interface UserDoc { _id: string; name: string; phone: string; pwHash: string; role: string; state: string; district: string; createdAt: Date }
+export interface PublicUser { id: string; name: string; email: string; role: string; state: string; district: string }
+export interface UserDoc { _id: string; name: string; email: string; pwHash: string; role: string; state: string; district: string; createdAt: Date }
 interface SessionDoc { _id: string; userId: string; expiresAt: Date }
 
-export const toPublic = (u: UserDoc): PublicUser => ({ id: u._id, name: u.name, phone: u.phone, role: u.role, state: u.state, district: u.district });
+export const toPublic = (u: UserDoc): PublicUser => ({ id: u._id, name: u.name, email: u.email, role: u.role, state: u.state, district: u.district });
 
 export function hashPassword(pw: string) {
   const salt = randomBytes(16);
@@ -23,9 +23,9 @@ export function verifyPassword(pw: string, stored: string) {
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 
-// Returns null if the phone number is already registered.
-export async function createUser(v: { name: string; phone: string; pw: string; role: string }): Promise<PublicUser | null> {
-  const doc: UserDoc = { _id: randomUUID(), name: v.name, phone: v.phone, pwHash: hashPassword(v.pw), role: v.role, state: '', district: '', createdAt: new Date() };
+// Returns null if the email is already registered.
+export async function createUser(v: { name: string; email: string; pw: string; role: string }): Promise<PublicUser | null> {
+  const doc: UserDoc = { _id: randomUUID(), name: v.name, email: v.email, pwHash: hashPassword(v.pw), role: v.role, state: '', district: '', createdAt: new Date() };
   try {
     await (await db()).collection<UserDoc>('users').insertOne(doc);
   } catch (e) {

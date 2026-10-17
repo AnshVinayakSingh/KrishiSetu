@@ -73,7 +73,7 @@ export default function ApplyPage() {
               <input name="fullName" defaultValue={user?.name} required className={input} />
             </label>
             <label className="block text-sm font-semibold">{hi ? 'मोबाइल नंबर *' : 'Mobile number *'}
-              <input name="phone" defaultValue={user?.phone} inputMode="numeric" maxLength={10} required className={input} />
+              <input name="phone" inputMode="numeric" maxLength={10} required className={input} />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-semibold">{hi ? 'राज्य *' : 'State *'}
