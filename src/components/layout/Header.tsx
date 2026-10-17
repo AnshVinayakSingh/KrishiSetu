@@ -2,20 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/context/LanguageContext';
-import { MANDI_PRICES } from '@/data/mockData';
-import { 
-  Sprout, 
-  PhoneCall, 
-  Languages, 
-  MapPin, 
-  Bell, 
-  Menu, 
-  X, 
-  TrendingUp, 
-  Sparkles
-} from 'lucide-react';
+import { useLocation } from '@/context/LocationContext';
+import PolicyBanner from './PolicyBanner';
+import { Sprout, Languages, MapPin, Bell, Menu, X } from 'lucide-react';
 
 interface HeaderProps {
   onToggleMobileMenu?: () => void;
@@ -24,70 +15,14 @@ interface HeaderProps {
 
 export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderProps) {
   const { language, setLanguage, t } = useLanguage();
-  const pathname = usePathname();
   const router = useRouter();
-  const [selectedLocation, setSelectedLocation] = useState('Sehore, MP');
-  const [showLocationModal, setShowLocationModal] = useState(false);
+  const { place } = useLocation();
   const [showNotificationModal, setShowNotificationModal] = useState(false);
-
-  const locations = [
-    'Sehore, MP',
-    'Ludhiana, Punjab',
-    'Karnal, Haryana',
-    'Nashik, Maharashtra',
-    'Kota, Rajasthan',
-    'Agra, UP',
-    'Kolar, Karnataka'
-  ];
-
-  const navLinks = [
-    { href: '/', label: t('navOverview') },
-    { href: '/dashboard', label: t('navDashboard') },
-    { href: '/assistant', label: t('navAssistant'), highlight: true },
-    { href: '/disease-detection', label: t('navDisease') },
-    { href: '/marketplace', label: t('navMarketplace') },
-    { href: '/schemes', label: t('navSchemes') },
-    { href: '/weather', label: t('navWeather') },
-  ];
+  const locationLabel = place ? [place.city || place.district, place.state].filter(Boolean).join(', ') : (language === 'hi' ? 'लोकेशन...' : 'Locating...');
 
   return (
-    <header className="sticky top-0 z-40 w-full flex flex-col border-b border-[#E2E8DF] bg-white/90 backdrop-blur-md">
-      {/* Top Ticker Bar: Agmarknet Mandi Benchmark Rates */}
-      <div className="w-full bg-[#123B2A] text-white text-xs py-1.5 px-3 sm:px-6 flex items-center justify-between border-b border-[#14532D]">
-        <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-          <span className="flex items-center gap-1.5 font-semibold text-[#86B96B] shrink-0">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('mandiTickerLabel')}:</span>
-            <span className="sm:hidden">मंडी भाव:</span>
-          </span>
-          <div className="flex items-center gap-4 animate-none overflow-x-auto no-scrollbar scroll-smooth">
-            {MANDI_PRICES.slice(0, 4).map((item) => (
-              <span key={item.id} className="inline-flex items-center gap-1.5 shrink-0 bg-white/10 px-2 py-0.5 rounded text-[11px]">
-                <span className="text-white font-medium">{language === 'hi' ? item.cropHi : item.crop}</span>
-                <span className="text-[#E9B949] font-bold">₹{item.pricePerQuintal}</span>
-                <span className={`text-[10px] ${item.change >= 0 ? 'text-[#86B96B]' : 'text-rose-300'}`}>
-                  {item.change >= 0 ? `+₹${item.change}` : `-₹${Math.abs(item.change)}`}
-                </span>
-                <span className="text-white/60 text-[10px]">({item.mandi.split(' ')[0]})</span>
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Toll-free Kisan Helpline Clickable */}
-        <div className="hidden lg:flex items-center gap-2 text-[#86B96B] shrink-0 pl-3">
-          <PhoneCall className="w-3 h-3 text-[#E9B949]" />
-          <span className="text-white/80">{t('kisanCallCenter')}:</span>
-          <a 
-            href="tel:18001801551" 
-            className="text-[#E9B949] hover:underline font-bold tracking-wide"
-            title="Toll Free Kisan Call Centre"
-          >
-            1800-180-1551
-          </a>
-        </div>
-      </div>
-
+    <>
+    <header className="sticky top-0 z-40 w-full border-b border-[#E2E8DF] bg-white/90 backdrop-blur-md">
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand Logo & Wordmark - Clickable to Home */}
@@ -104,29 +39,6 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
             </span>
           </div>
         </Link>
-
-        {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1.5 lg:gap-2">
-          {navLinks.map((link) => {
-            const isActive = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive 
-                    ? 'bg-[#14532D] text-white shadow-xs' 
-                    : link.highlight
-                    ? 'text-[#14532D] bg-[#86B96B]/20 hover:bg-[#86B96B]/30 font-semibold'
-                    : 'text-[#17251D] hover:bg-black/5 hover:text-[#14532D]'
-                }`}
-              >
-                {link.highlight && <Sparkles className="w-3.5 h-3.5 inline mr-1 text-[#228B52]" />}
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
 
         {/* Right Action Tools: Language, Location, Notifications, Mobile Drawer */}
         <div className="flex items-center gap-2 sm:gap-3">
@@ -146,39 +58,10 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
             {t('lpLogout')}
           </button>
 
-          {/* Location Selector Dropdown Pill */}
-          <div className="relative hidden sm:block">
-            <button
-              onClick={() => setShowLocationModal(!showLocationModal)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#E2E8DF] bg-[#F8F7F0] text-xs font-medium text-[#17251D] hover:bg-white transition-all"
-            >
-              <MapPin className="w-3.5 h-3.5 text-[#228B52]" />
-              <span className="truncate max-w-[90px]">{selectedLocation}</span>
-            </button>
-
-            {showLocationModal && (
-              <div className="absolute right-0 mt-2 w-48 rounded-xl glass-dropdown p-2 z-50">
-                <div className="text-[11px] font-semibold text-[#66746A] px-2 py-1 uppercase tracking-wider">
-                  {t('selectLocation')}
-                </div>
-                {locations.map((loc) => (
-                  <button
-                    key={loc}
-                    onClick={() => {
-                      setSelectedLocation(loc);
-                      setShowLocationModal(false);
-                    }}
-                    className={`w-full text-left px-2 py-1.5 text-xs rounded-lg transition-colors ${
-                      selectedLocation === loc 
-                        ? 'bg-[#14532D] text-white font-medium' 
-                        : 'text-[#17251D] hover:bg-[#F8F7F0]'
-                    }`}
-                  >
-                    {loc}
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Live detected location */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#E2E8DF] bg-[#F8F7F0] text-xs font-medium text-[#17251D]">
+            <MapPin className="w-3.5 h-3.5 text-[#228B52]" />
+            <span className="truncate max-w-[140px]">{locationLabel}</span>
           </div>
 
           {/* Notifications Modal Pill */}
@@ -227,7 +110,7 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
           {/* Mobile Menu Hamburger Toggle */}
           <button
             onClick={onToggleMobileMenu}
-            className="md:hidden p-2 rounded-lg border border-[#E2E8DF] text-[#14532D] hover:bg-[#F8F7F0] focus:outline-none"
+            className="lg:hidden p-2 rounded-lg border border-[#E2E8DF] text-[#14532D] hover:bg-[#F8F7F0] focus:outline-none"
             aria-label="Toggle Navigation Menu"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -235,5 +118,7 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
         </div>
       </div>
     </header>
+    <PolicyBanner />
+    </>
   );
 }

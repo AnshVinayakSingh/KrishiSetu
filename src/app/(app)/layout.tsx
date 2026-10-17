@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LocationProvider } from '@/context/LocationContext';
+import LocationGate from '@/components/common/LocationGate';
 
-// Sends visitors who are not logged in back to /login.
+// Login check first, then location permission gate. Nothing renders until both pass.
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [ok, setOk] = useState(false);
@@ -11,5 +13,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (localStorage.getItem('krishisetu_user')) setOk(true);
     else router.replace('/login');
   }, [router]);
-  return ok ? <>{children}</> : null;
+  if (!ok) return null;
+  return (
+    <LocationProvider>
+      <LocationGate>{children}</LocationGate>
+    </LocationProvider>
+  );
 }

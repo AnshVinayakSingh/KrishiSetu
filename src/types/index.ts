@@ -264,3 +264,51 @@ export interface CommunityReport {
   userVoted: 'up' | 'down' | null;
   verificationLevel: 'Farmer Community' | 'Agronomist Verified' | 'District Admin';
 }
+
+export interface WeatherDay {
+  date: string; // YYYY-MM-DD
+  tempMax: number;
+  tempMin: number;
+  rainProb: number | null;
+  rainMm: number;
+  condition: string;
+  conditionHi: string;
+  icon: 'sun' | 'cloud' | 'rain' | 'storm' | 'snow' | 'fog';
+}
+
+export interface WeatherApiResponse {
+  source: 'live' | 'demo';
+  current: {
+    temp: number;
+    humidity: number;
+    wind: number;
+    rainMm: number;
+    condition: string;
+    conditionHi: string;
+    icon: WeatherDay['icon'];
+  };
+  past: WeatherDay[]; // previous 7 days
+  today: WeatherDay;
+  next: WeatherDay[]; // next 7 days
+  updatedAt: string;
+}
+
+export interface MandiRow {
+  id: string;
+  crop: string;
+  cropHi?: string;
+  variety?: string;
+  mandi: string;
+  state: string;
+  modal: number; // ₹/quintal
+  min?: number;
+  max?: number;
+  change?: number;
+  date: string;
+}
+
+export interface MandiApiResponse {
+  source: 'live' | 'demo';
+  rows: MandiRow[];
+  updatedAt: string;
+}
