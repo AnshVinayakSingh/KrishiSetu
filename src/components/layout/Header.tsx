@@ -52,7 +52,7 @@ export default function Header({ onToggleMobileMenu, isMobileMenuOpen }: HeaderP
             <span>{language === 'en' ? 'हिंदी' : 'English'}</span>
           </button>
           <button
-            onClick={() => { localStorage.removeItem('krishisetu_user'); router.push('/'); }}
+            onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/'); }}
             className="px-3 py-1.5 rounded-full border border-[#E2E8DF] bg-white text-xs font-semibold text-[#14532D] hover:bg-[#F8F7F0]"
           >
             {t('lpLogout')}

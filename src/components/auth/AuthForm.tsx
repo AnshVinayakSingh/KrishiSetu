@@ -13,29 +13,25 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const signup = mode === 'signup';
   const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
 
-  const read = (): Record<string, any> => {
-    try { return JSON.parse(localStorage.getItem('krishisetu_users') || '{}'); } catch { return {}; }
-  };
-
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const v = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     const bad = (k: string) => setMsg({ text: t(k), bad: true });
-    const users = read();
     if (signup) {
       if (v.name.trim().length < 2) return bad('lpErrName');
       if (!/^[6-9]\d{9}$/.test(v.phone)) return bad('lpErrPhone');
       if (v.pw.length < 6) return bad('lpErrPass');
-      if (users[v.phone]) return bad('lpErrExists');
-      const u = { name: v.name.trim(), phone: v.phone, role: v.role };
-      users[v.phone] = { ...u, pw: v.pw };
-      localStorage.setItem('krishisetu_users', JSON.stringify(users));
-      localStorage.setItem('krishisetu_user', JSON.stringify(u));
-    } else {
-      const u = users[v.phone];
-      if (!u || u.pw !== v.pw) return bad('lpErrWrong');
-      const { pw, ...rest } = u;
-      localStorage.setItem('krishisetu_user', JSON.stringify(rest));
+    }
+    try {
+      const res = await fetch(`/api/auth/${mode}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(v),
+      });
+      const d = await res.json();
+      if (!res.ok) return bad(d.error ?? 'lpErrWrong');
+    } catch {
+      return bad('lpErrWrong');
     }
     setMsg({ text: t('lpOk'), bad: false });
     setTimeout(() => router.push('/dashboard'), 600);

@@ -247,6 +247,17 @@ export default function AssistantPage() {
     }
   };
 
+  // "Know more" from a policy banner lands here as /assistant?q=<question>: ask it once automatically.
+  const autoAsked = useRef(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (!q || autoAsked.current) return;
+    autoAsked.current = true;
+    window.history.replaceState(null, '', '/assistant');
+    handleSendMessage(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleClearChat = () => {
     stopSpeaking();
     setMessages([

@@ -3,20 +3,25 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LocationProvider } from '@/context/LocationContext';
+import { UserProvider, type AppUser } from '@/context/UserContext';
 import LocationGate from '@/components/common/LocationGate';
 
-// Login check first, then location permission gate. Nothing renders until both pass.
+// 1) session check against the database, 2) location permission gate. Nothing renders until both pass.
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [ok, setOk] = useState(false);
+  const [user, setUser] = useState<AppUser | null>(null);
   useEffect(() => {
-    if (localStorage.getItem('krishisetu_user')) setOk(true);
-    else router.replace('/login');
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setUser(d.user))
+      .catch(() => router.replace('/login'));
   }, [router]);
-  if (!ok) return null;
+  if (!user) return null;
   return (
-    <LocationProvider>
-      <LocationGate>{children}</LocationGate>
-    </LocationProvider>
+    <UserProvider user={user}>
+      <LocationProvider>
+        <LocationGate>{children}</LocationGate>
+      </LocationProvider>
+    </UserProvider>
   );
 }

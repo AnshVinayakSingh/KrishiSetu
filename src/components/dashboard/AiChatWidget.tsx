@@ -16,6 +16,7 @@ export default function AiChatWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [convId, setConvId] = useState<string | undefined>();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -31,9 +32,10 @@ export default function AiChatWidget() {
       const res = await fetch('/api/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, language, context: { location: place ? `${place.city}, ${place.state}` : undefined } }),
+        body: JSON.stringify({ query: q, language, persist: true, conversationId: convId, context: { location: place ? `${place.city}, ${place.state}` : undefined } }),
       });
       const j = await res.json();
+      if (j.conversationId) setConvId(j.conversationId);
       setMsgs((m) => [...m, { role: 'ai', text: String(j.response ?? '').replace(/\*\*/g, '').replace(/\*/g, '') || (hi ? 'जवाब नहीं मिला' : 'No answer') }]);
     } catch {
       setMsgs((m) => [...m, { role: 'ai', text: hi ? 'कुछ गड़बड़ हुई, दोबारा कोशिश करें।' : 'Something went wrong, try again.' }]);

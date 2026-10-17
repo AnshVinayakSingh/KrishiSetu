@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileMenu from '@/components/layout/MobileMenu';
@@ -10,22 +10,14 @@ import MandiPrices from '@/components/dashboard/MandiPrices';
 import AiChatWidget from '@/components/dashboard/AiChatWidget';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLocation } from '@/context/LocationContext';
+import { useUser } from '@/context/UserContext';
 
 export default function DashboardPage() {
   const { language } = useLanguage();
   const { place } = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [userName, setUserName] = useState('');
+  const userName = useUser()?.name ?? '';
   const hi = language === 'hi';
-
-  useEffect(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('krishisetu_user') ?? '{}');
-      if (u.name) setUserName(u.name);
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const where = place ? [place.city || place.district, place.state].filter(Boolean).join(', ') : '';
 

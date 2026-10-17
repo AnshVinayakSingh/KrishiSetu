@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCurrentUser } from '@/lib/auth';
+import { addMessage, createConversation, ownsConversation } from '@/lib/chatStore';
 
 interface AssistantRequestBody {
   query: string;
   language?: 'hi' | 'en';
+  persist?: boolean;          // save this exchange to the logged-in user's chat history
+  conversationId?: string;
   context?: {
     crop?: string;
     location?: string;
@@ -97,8 +101,21 @@ Would you like to analyze a specific crop disease photo or simulate your harvest
       ];
     }
 
+    let conversationId: string | undefined;
+    if (body.persist) {
+      const user = await getCurrentUser();
+      if (user) {
+        conversationId = body.conversationId && (await ownsConversation(user.id, body.conversationId))
+          ? body.conversationId
+          : await createConversation(user.id, body.query.slice(0, 60));
+        await addMessage(conversationId, 'user', body.query, lang);
+        await addMessage(conversationId, 'assistant', lang === 'hi' ? answerHi : answerEn, lang);
+      }
+    }
+
     return NextResponse.json({
       success: true,
+      conversationId,
       mode: 'verified-knowledge-base',
       query: body.query,
       response: lang === 'hi' ? answerHi : answerEn,
