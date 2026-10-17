@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import MinimalBar from '@/components/layout/MinimalBar';
 import { useLanguage } from '@/context/LanguageContext';
@@ -28,6 +29,8 @@ function BridgeArt({ label }: { label: string }) {
 
 export default function LandingPage() {
   const { t } = useLanguage();
+  const [year, setYear] = useState(2026);
+  useEffect(() => setYear(new Date().getFullYear()), []);
   return (
     <div className="min-h-screen flex flex-col">
       <MinimalBar cta />
@@ -48,7 +51,7 @@ export default function LandingPage() {
         <BridgeArt label={t('lpArt')} />
       </main>
       <footer className="border-t border-[#E2E8DF] py-5 text-center text-sm text-[#66746A]">
-        &copy; {new Date().getFullYear()} {t('appName')}. {t('lpFoot')}
+        &copy; {year} {t('appName')}. {t('lpFoot')}
       </footer>
     </div>
   );
