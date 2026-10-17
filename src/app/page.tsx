@@ -50,6 +50,37 @@ export default function LandingPage() {
         </div>
         <BridgeArt label={t('lpArt')} />
       </main>
+      <section id="features" className="border-t border-[#E2E8DF] bg-white scroll-mt-16">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14">
+          <h2 className="text-2xl sm:text-3xl font-bold text-[#14532D]">{t('lpFeatTitle')}</h2>
+          <div className="mt-8 grid md:grid-cols-2 md:gap-x-12">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+              <div key={i} className="py-4 border-t border-[#E2E8DF]">
+                <h3 className="font-semibold text-[#17251D]">{t(`lpF${i}T`)}</h3>
+                <p className="text-[#66746A]">{t(`lpF${i}D`)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      <section id="how" className="border-t border-[#E2E8DF] scroll-mt-16">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 grid md:grid-cols-2 gap-12">
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#14532D]">{t('lpHowTitle')}</h2>
+            <ol className="mt-6 space-y-5 list-decimal pl-5 marker:font-bold marker:text-[#228B52]">
+              {[1, 2, 3].map((i) => (
+                <li key={i}><span className="font-semibold">{t(`lpH${i}T`)}</span><p className="text-[#66746A]">{t(`lpH${i}D`)}</p></li>
+              ))}
+            </ol>
+          </div>
+          <div className="space-y-6">
+            <div className="border-t border-[#E2E8DF] pt-4"><h3 className="text-xl font-bold text-[#14532D]">{t('lpForFarm')}</h3><p className="text-[#66746A]">{t('lpForFarmD')}</p></div>
+            <div className="border-t border-[#E2E8DF] pt-4"><h3 className="text-xl font-bold text-[#14532D]">{t('lpForBuy')}</h3><p className="text-[#66746A]">{t('lpForBuyD')}</p></div>
+            <p className="text-sm text-[#66746A]">{t('lpNote')}</p>
+            <Link href="/signup" className="inline-block px-6 py-3 rounded-lg font-semibold bg-[#14532D] text-white hover:bg-[#123B2A]">{t('lpSignup')}</Link>
+          </div>
+        </div>
+      </section>
       <footer className="border-t border-[#E2E8DF] py-5 text-center text-sm text-[#66746A]">
         &copy; {year} {t('appName')}. {t('lpFoot')}
       </footer>

@@ -31,6 +31,8 @@ export default function MinimalBar({ cta = false }: { cta?: boolean }) {
           </button>
           {cta && (
             <>
+              <a href="/#features" className="hidden md:inline px-3 py-1.5 text-sm font-semibold text-[#17251D] hover:underline">{t('lpNavFeat')}</a>
+              <a href="/#how" className="hidden md:inline px-3 py-1.5 text-sm font-semibold text-[#17251D] hover:underline">{t('lpHowTitle')}</a>
               <Link href="/login" className="px-3 py-1.5 text-sm font-semibold text-[#14532D] hover:underline">{t('lpLogin')}</Link>
               <Link href="/signup" className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#14532D] text-white hover:bg-[#123B2A] focus:outline-none focus:ring-2 focus:ring-[#86B96B]">{t('lpSignup')}</Link>
             </>
