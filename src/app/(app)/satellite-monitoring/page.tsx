@@ -1,403 +1,200 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useLocation } from '@/context/LocationContext';
-import Header from '@/components/layout/Header';
-import Sidebar from '@/components/layout/Sidebar';
-import MobileMenu from '@/components/layout/MobileMenu';
-import Footer from '@/components/layout/Footer';
-import Toast, { ToastMessage } from '@/components/common/Toast';
+import React, { useCallback, useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { Droplets, Layers, LocateFixed, MapPin, Plus, RefreshCw, Satellite, Sparkles, Trash2, Undo2, Waves } from 'lucide-react';
+import AppShell from '@/components/layout/AppShell';
 import { useLanguage } from '@/context/LanguageContext';
-import { INITIAL_SENSOR_TELEMETRY } from '@/data/mockData';
-import { SensorTelemetry } from '@/types';
-import { 
-  Satellite, 
-  Droplets, 
-  Activity, 
-  Wifi, 
-  Battery, 
-  ShieldCheck, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Power, 
-  RefreshCw, 
-  Sliders,
-  Layers,
-  Calendar,
-  Lock
-} from 'lucide-react';
+import { useLocation } from '@/context/LocationContext';
 
-export default function SatelliteMonitoringPage() {
-  const { language, t } = useLanguage();
-  const { coords } = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [selectedField, setSelectedField] = useState('field-1');
-  const [telemetry, setTelemetry] = useState<SensorTelemetry>(INITIAL_SENSOR_TELEMETRY);
-  const [isLoadingTelemetry, setIsLoadingTelemetry] = useState(false);
-  const [showPumpSafetyModal, setShowPumpSafetyModal] = useState(false);
-  const [pumpConfirmed, setPumpConfirmed] = useState(false);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+const FieldMap = dynamic(() => import('@/components/satellite/FieldMap'), { ssr: false, loading: () => <div className="h-80 rounded-2xl bg-[#F1F3EE] animate-pulse" /> });
 
-  const addToast = (type: 'success' | 'error' | 'info', title: string, message?: string) => {
-    const id = Date.now().toString();
-    setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+type Pt = [number, number];
+interface Field { id: string; name: string; crop: string; sowingDate: string; ring: Pt[]; areaAcre: number }
+interface Analysis {
+  satellite: { available: boolean; series: { date: string; ndvi: number; ndmi: number }[] };
+  soil: { tempC: number; soilTopPct: number; soilRootPct: number; rainPast7Mm: number; rainNext7Mm: number } | null;
+  health: { label: 'good' | 'watch' | 'poor' | 'unknown'; score: number | null; trend: 'up' | 'down' | 'flat' };
+  daysAfterSowing: number | null;
+  advice: { summary: string; actions: { title: string; text: string; priority: 'high' | 'medium' | 'low' }[] } | null;
+  notes: string[];
+}
+
+const CROPS = ['Wheat', 'Rice', 'Maize', 'Mustard', 'Sugarcane', 'Cotton', 'Soybean', 'Potato', 'Tomato', 'Onion', 'Gram', 'Other'];
+const HEALTH = {
+  good: ['bg-emerald-100 text-emerald-800', 'फसल स्वस्थ है', 'Crop is healthy'], watch: ['bg-amber-100 text-amber-800', 'ध्यान दें', 'Needs attention'],
+  poor: ['bg-rose-100 text-rose-800', 'फसल कमज़ोर है', 'Crop is weak'], unknown: ['bg-slate-100 text-slate-700', 'डेटा नहीं मिला', 'No satellite data yet'],
+} as const;
+const PRI = { high: 'border-rose-300 bg-rose-50', medium: 'border-amber-300 bg-amber-50', low: 'border-[#E2E8DF] bg-white' } as const;
+
+function areaAcre(pts: Pt[]) {
+  if (pts.length < 3) return 0;
+  const lat0 = pts.reduce((a, p) => a + p[1], 0) / pts.length, kx = 111320 * Math.cos((lat0 * Math.PI) / 180), ky = 110540;
+  let a = 0; for (let i = 0; i < pts.length; i++) { const q = pts[(i + 1) % pts.length]; a += pts[i][0] * kx * q[1] * ky - q[0] * kx * pts[i][1] * ky; }
+  return Math.abs(a / 2) / 4046.86;
+}
+
+function Trend({ s }: { s: Analysis['satellite']['series'] }) {
+  if (s.length < 2) return <p className="text-sm text-[#66746A]">—</p>;
+  const W = 320, H = 110, x = (i: number) => 8 + (i / (s.length - 1)) * (W - 16), y = (v: number) => H - 10 - Math.max(0, Math.min(0.9, v)) / 0.9 * (H - 20);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+      {[0.3, 0.5, 0.7].map((g) => <line key={g} x1="0" x2={W} y1={y(g)} y2={y(g)} stroke="#E2E8DF" strokeDasharray="3 3" />)}
+      <polyline fill="none" stroke="#228B52" strokeWidth="3" strokeLinejoin="round" points={s.map((p, i) => `${x(i)},${y(p.ndvi)}`).join(' ')} />
+      {s.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.ndvi)} r="3.5" fill="#14532D" />)}
+    </svg>
+  );
+}
+
+export default function CropSatellitePage() {
+  const { language } = useLanguage();
+  const hi = language === 'hi';
+  const { coords, request } = useLocation();
+  const [fields, setFields] = useState<Field[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<Pt[]>([]);
+  const [form, setForm] = useState({ name: '', crop: 'Wheat', sowingDate: '' });
+  const [an, setAn] = useState<Analysis | null>(null);
+  const [anBusy, setAnBusy] = useState(false);
+  const [showMap, setShowMap] = useState(true);
+  const [err, setErr] = useState('');
+
+  const field = fields.find((f) => f.id === sel) ?? null;
+
+  const loadFields = useCallback(async () => {
+    try { const r = await fetch('/api/fields'); const j = await r.json(); setFields(j.fields ?? []); if (!sel && j.fields?.length) setSel(j.fields[0].id); }
+    catch { /* ignore */ } finally { setLoaded(true); }
+  }, [sel]);
+  useEffect(() => { loadFields(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  const analyse = useCallback(async (id: string, fresh = false) => {
+    setAnBusy(true); setAn(null);
+    try { const r = await fetch(`/api/fields/${id}/analysis?lang=${language}${fresh ? '&fresh=1' : ''}`); if (r.ok) setAn(await r.json()); } catch { /* ignore */ }
+    setAnBusy(false);
+  }, [language]);
+  useEffect(() => { if (sel && !adding) analyse(sel); }, [sel, adding, analyse]);
+
+  const save = async () => {
+    setErr('');
+    const r = await fetch('/api/fields', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, points: draft }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return setErr(j.error === 'bad_area' ? (hi ? 'खेत का आकार सही नहीं है (0.05–500 एकड़)।' : 'Field size must be 0.05–500 acre.') : (hi ? 'सेव नहीं हुआ।' : 'Could not save.'));
+    setFields((f) => [j.field, ...f]); setSel(j.field.id); setAdding(false); setDraft([]); setForm({ name: '', crop: 'Wheat', sowingDate: '' });
+  };
+  const remove = async (id: string) => {
+    if (!confirm(hi ? 'यह खेत हटाएँ?' : 'Delete this field?')) return;
+    await fetch(`/api/fields/${id}`, { method: 'DELETE' });
+    const rest = fields.filter((f) => f.id !== id); setFields(rest); setSel(rest[0]?.id ?? null); setAn(null);
   };
 
-  const fields = [
-    {
-      id: 'field-1',
-      name: 'Wheat Plot #1 (North Acre)',
-      nameHi: 'गेहूँ प्लॉट #1 (उत्तरी रकबा)',
-      crop: 'Sharbati Wheat (DBW-187)',
-      sownDate: '2026-10-01 (16 Days Ago)',
-      soil: 'Black Loamy Soil',
-      ndvi: 0.74,
-      ndwi: 0.32,
-      cloudCover: '4% (Clear Imagery)'
-    },
-    {
-      id: 'field-2',
-      name: 'Mustard Plot #2 (East Ridge)',
-      nameHi: 'सरसों प्लॉट #2 (पूर्वी मेड़)',
-      crop: 'Yellow Mustard (Pusa-28)',
-      sownDate: '2026-09-28 (19 Days Ago)',
-      soil: 'Sandy Loam',
-      ndvi: 0.68,
-      ndwi: 0.28,
-      cloudCover: '6%'
-    }
-  ];
-
-  const currentField = fields.find((f) => f.id === selectedField) || fields[0];
-
-  // Fetch telemetry from /api/sensor-data
-  const fetchTelemetry = async () => {
-    setIsLoadingTelemetry(true);
-    try {
-      const res = await fetch(coords ? `/api/sensor-data?lat=${coords.lat}&lon=${coords.lon}` : '/api/sensor-data');
-      const data = await res.json();
-      if (data.success && data.telemetry) {
-        setTelemetry(data.telemetry);
-      }
-    } catch (err) {
-      // Keep initial telemetry
-    } finally {
-      setIsLoadingTelemetry(false);
-    }
-  };
-
-  // Load real soil data once we know the location, then refresh every 10 min.
-  useEffect(() => {
-    if (!coords) return;
-    fetchTelemetry();
-    const id = setInterval(fetchTelemetry, 10 * 60 * 1000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coords]);
-
-  const handleSimulateMoisture = async (newMoisture: number) => {
-    try {
-      const res = await fetch('/api/sensor-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          soilMoisturePercent: newMoisture,
-          deviceId: telemetry.deviceId
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTelemetry(data.telemetry);
-        addToast(
-          'info',
-          'Telemetry Simulated',
-          `Sensor reported moisture level: ${newMoisture}% (${data.telemetry.irrigationStatus}).`
-        );
-      }
-    } catch (err) {
-      addToast('error', 'Simulation Failed');
-    }
-  };
+  const h = HEALTH[an?.health.label ?? 'unknown'];
+  const last = an?.satellite.series.at(-1);
+  const notConfigured = an?.notes.includes('satellite_not_configured');
+  const center: Pt | null = coords ? [coords.lon, coords.lat] : null;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F7F0] text-[#17251D]">
-      <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
-      <Header onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)} isMobileMenuOpen={isMobileMenuOpen} />
-      <Toast toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))} />
-
-      <div className="flex-1 max-w-7xl w-full mx-auto flex">
-        <Sidebar />
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8DF]">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-[#14532D] flex items-center gap-2">
-                <Satellite className="w-6 h-6 text-[#228B52]" />
-                <span>{language === 'hi' ? 'उपग्रह फसल निगरानी एवं स्मार्ट सिंचाई' : 'Satellite Crop Health & Smart Irrigation'}</span>
-              </h1>
-              <p className="text-xs text-[#66746A] mt-1 max-w-2xl">
-                {language === 'hi'
-                  ? 'मल्टी-स्पेक्ट्रल NDVI वनस्पति सूचकांक और ESP32 IoT मृदा सेंसर के समन्वय से पानी की बचत व समय पर सिंचाई सलाह।'
-                  : 'Multi-spectral Sentinel-2 NDVI canopy monitoring integrated with ESP32 in-situ soil moisture telemetry.'}
-              </p>
-            </div>
-
-            {/* Field Parcel Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#66746A]">
-                {language === 'hi' ? 'खेत चुनें:' : 'Select Parcel:'}
-              </span>
-              <select
-                value={selectedField}
-                onChange={(e) => setSelectedField(e.target.value)}
-                className="px-3 py-1.5 rounded-xl bg-white border border-[#E2E8DF] text-xs font-bold text-[#14532D] focus:outline-none focus:border-[#14532D]"
-              >
-                {fields.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {language === 'hi' ? f.nameHi : f.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <AppShell>
+      <div className="max-w-3xl mx-auto space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black text-[#14532D] flex items-center gap-2"><Satellite className="w-6 h-6" /> {hi ? 'सैटेलाइट फसल प्रबंधन' : 'Satellite Crop Manager'}</h1>
+            <p className="text-sm text-[#66746A]">{hi ? 'अपना खेत नक्शे पर चिह्नित करें, सैटेलाइट से फसल की सेहत देखें।' : 'Mark your field on the map. See crop health from satellite.'}</p>
           </div>
+          {!adding && <button onClick={() => { setAdding(true); if (!coords) request(); }} className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#14532D] text-white text-sm font-bold"><Plus className="w-4 h-4" /> {hi ? 'खेत जोड़ें' : 'Add field'}</button>}
+        </div>
 
-          {/* Top Grid: Satellite NDVI Parcel Map & Indices */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left 7 Cols: Multi-spectral NDVI Heatmap Simulation */}
-            <div className="lg:col-span-7 glass-panel p-5 rounded-3xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#E2E8DF]">
-                <div>
-                  <h3 className="text-sm font-extrabold text-[#14532D]">
-                    {language === 'hi' ? currentField.nameHi : currentField.name}
-                  </h3>
-                  <p className="text-[11px] text-[#66746A]">
-                    {currentField.crop} • {currentField.soil}
-                  </p>
-                </div>
-                <span className="text-[11px] bg-[#86B96B]/20 text-[#14532D] font-bold px-2 py-0.5 rounded-full">
-                  Sentinel-2 MSI
-                </span>
-              </div>
-
-              {/* Simulated Multi-spectral Grid Heatmap */}
-              <div className="relative rounded-2xl overflow-hidden border border-[#86B96B]/40 bg-gradient-to-br from-[#14532D] via-[#228B52] to-[#86B96B] p-6 text-white min-h-[220px] flex flex-col justify-between shadow-inner">
-                {/* Visual Topographic Parcel Contours */}
-                <div className="absolute inset-0 opacity-20 pointer-events-none">
-                  <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="50%" cy="50%" r="35%" fill="none" stroke="#FFFFFF" strokeWidth="2" strokeDasharray="4,4" />
-                    <circle cx="50%" cy="50%" r="55%" fill="none" stroke="#FFFFFF" strokeWidth="1.5" />
-                  </svg>
-                </div>
-
-                <div className="flex items-center justify-between z-10">
-                  <span className="text-xs bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full font-bold">
-                    NDVI: {currentField.ndvi} (High Canopy Vigour)
-                  </span>
-                  <span className="text-[11px] bg-black/40 backdrop-blur-md px-2 py-1 rounded-full">
-                    Cloud Cover: {currentField.cloudCover}
-                  </span>
-                </div>
-
-                {/* Center Coordinates & Growth Tracker */}
-                <div className="my-auto text-center z-10 py-4">
-                  <div className="inline-block bg-black/50 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20">
-                    <span className="block text-xs text-white/80">Sowing Progress</span>
-                    <span className="text-base font-extrabold text-[#86B96B]">{currentField.sownDate}</span>
-                    <span className="block text-[10px] text-white/60">Estimated Crown Root Stage</span>
-                  </div>
-                </div>
-
-                {/* NDVI Scale Bar */}
-                <div className="z-10 bg-black/50 backdrop-blur-md p-2 rounded-xl flex items-center justify-between text-[10px]">
-                  <span>0.1 (Bare Soil)</span>
-                  <div className="h-2 flex-1 mx-3 rounded-full bg-gradient-to-r from-amber-400 via-lime-400 to-[#14532D]" />
-                  <span>0.9 (Dense Healthy)</span>
-                </div>
-              </div>
-
-              {/* Historical NDVI Timeline Bars */}
-              <div className="pt-2">
-                <span className="text-xs font-bold text-[#14532D] block mb-2">
-                  Historical NDVI Progression (Last 4 Weeks)
-                </span>
-                <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                  <div className="p-2 rounded-xl bg-white border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Week 1 (Sow)</span>
-                    <span className="font-extrabold text-[#14532D]">0.22</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-white border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Week 2</span>
-                    <span className="font-extrabold text-[#14532D]">0.41</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-white border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Week 3</span>
-                    <span className="font-extrabold text-[#14532D]">0.62</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-[#86B96B]/20 border border-[#86B96B]">
-                    <span className="text-[10px] text-[#14532D] font-bold block">Current</span>
-                    <span className="font-black text-[#14532D]">{currentField.ndvi}</span>
-                  </div>
-                </div>
-              </div>
+        {adding && (
+          <section className="rounded-2xl bg-white border border-[#E2E8DF] p-5 space-y-4">
+            <p className="font-bold text-[#14532D]">{hi ? '1. नक्शे पर खेत के कोनों पर बारी-बारी से दबाएँ' : '1. Tap the corners of your field on the map, one by one'}</p>
+            <FieldMap center={center} draft={draft} onAdd={(p) => setDraft((d) => [...d, p])} />
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <button onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#CBD5C8] disabled:opacity-40"><Undo2 className="w-4 h-4" /> {hi ? 'पीछे' : 'Undo'}</button>
+              <button onClick={() => setDraft([])} disabled={!draft.length} className="px-3 py-1.5 rounded-lg border border-[#CBD5C8] disabled:opacity-40">{hi ? 'साफ़ करें' : 'Clear'}</button>
+              <button onClick={request} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-[#CBD5C8]"><LocateFixed className="w-4 h-4" /> {hi ? 'मेरी लोकेशन' : 'My location'}</button>
+              <span className="ml-auto font-semibold text-[#14532D]">{draft.length >= 3 ? `${areaAcre(draft).toFixed(2)} ${hi ? 'एकड़' : 'acre'}` : `${draft.length}/3+ ${hi ? 'कोने' : 'corners'}`}</span>
             </div>
-
-            {/* Right 5 Cols: ESP32 IoT Soil Telemetry & Safety Pump Controller */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* ESP32 Hardware Card */}
-              <div className="glass-panel p-5 rounded-3xl space-y-4 border border-[#86B96B]/40 shadow-sm">
-                <div className="flex items-center justify-between pb-2 border-b border-[#E2E8DF]">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span className="text-xs font-bold text-[#14532D]">{telemetry.deviceId}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] text-[#66746A]">
-                    <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{telemetry.signalStrengthRssi} dBm</span>
-                    <Battery className="w-3.5 h-3.5 text-[#228B52] ml-1" />
-                    <span>{telemetry.batteryLevelPercent}%</span>
-                  </div>
-                </div>
-
-                {/* Primary Metric: Moisture Gauge */}
-                <div className="p-4 rounded-2xl bg-white border border-[#E2E8DF] text-center space-y-1">
-                  <span className="text-xs text-[#66746A] font-semibold">Root-Zone Soil Moisture</span>
-                  <div className="text-4xl font-black text-[#14532D]">
-                    {telemetry.soilMoisturePercent}%
-                  </div>
-                  <span className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                    telemetry.soilMoisturePercent < 35 
-                      ? 'bg-amber-100 text-amber-900' 
-                      : 'bg-emerald-100 text-emerald-900'
-                  }`}>
-                    {telemetry.status}: {telemetry.irrigationStatus}
-                  </span>
-                </div>
-
-                {/* Environmental Secondary Metrics */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2.5 rounded-xl bg-[#F8F7F0] border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Soil Temp</span>
-                    <span className="font-extrabold text-[#14532D]">{telemetry.soilTemperatureC}°C</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-[#F8F7F0] border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Air Temp</span>
-                    <span className="font-extrabold text-[#14532D]">{telemetry.ambientTempC}°C</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-[#F8F7F0] border border-[#E2E8DF]">
-                    <span className="text-[10px] text-[#66746A] block">Humidity</span>
-                    <span className="font-extrabold text-[#14532D]">{telemetry.ambientHumidityPercent}%</span>
-                  </div>
-                </div>
-
-                {/* Simulation Controls for Demonstration */}
-                <div className="pt-2 border-t border-[#E2E8DF] space-y-2">
-                  <span className="text-[11px] font-bold text-[#66746A] uppercase tracking-wider block">
-                    Interactive IoT Simulation Controls:
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSimulateMoisture(28)}
-                      className="flex-1 py-1.5 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[11px] font-bold transition-colors"
-                    >
-                      Simulate Dry (28%)
-                    </button>
-                    <button
-                      onClick={() => handleSimulateMoisture(52)}
-                      className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-[11px] font-bold transition-colors"
-                    >
-                      Simulate Wet (52%)
-                    </button>
-                  </div>
-                </div>
-
-                {/* Pump Safety Controller Button */}
-                <div className="pt-2">
-                  <button
-                    onClick={() => setShowPumpSafetyModal(true)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#14532D] hover:bg-[#123B2A] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all"
-                  >
-                    <Power className="w-4 h-4 text-[#86B96B]" />
-                    <span>
-                      {pumpConfirmed
-                        ? (language === 'hi' ? 'मोटर चालू (सक्रिय)' : 'Pump Running (Active)')
-                        : (language === 'hi' ? 'सिंचाई मोटर स्विच (सुरक्षा जांच)' : 'Activate Irrigation Pump')}
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Strict Safety Protocol Notice */}
-              <div className="p-3.5 rounded-2xl bg-[#14532D]/5 border border-[#14532D]/15 text-xs space-y-1">
-                <div className="flex items-center gap-1.5 text-[#14532D] font-bold">
-                  <Lock className="w-4 h-4 text-[#228B52]" />
-                  <span>{language === 'hi' ? 'सख्त सुरक्षा प्रोटोकॉल' : 'Strict Safety Protocol'}</span>
-                </div>
-                <p className="text-[11px] text-[#66746A] leading-relaxed">
-                  {language === 'hi'
-                    ? 'AI सलाह कभी भी वास्तविक मोटर या वॉल्व को स्वतः चालू नहीं करती। किसान की व्यक्तिगत 2-चरणीय पुष्टि अनिवार्य है।'
-                    : 'Physical pumps or valves are NEVER autonomously activated by AI models. Farmer multi-step confirmation is mandatory.'}
-                </p>
-              </div>
+            <p className="font-bold text-[#14532D]">{hi ? '2. खेत की जानकारी' : '2. Field details'}</p>
+            <div className="grid sm:grid-cols-3 gap-3 text-sm font-semibold">
+              <label>{hi ? 'खेत का नाम' : 'Field name'}<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={hi ? 'जैसे उत्तरी खेत' : 'e.g. North field'} className="w-full mt-1 rounded-lg border border-[#CBD5C8] px-3 py-2.5 font-normal" /></label>
+              <label>{hi ? 'फसल' : 'Crop'}<select value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} className="w-full mt-1 rounded-lg border border-[#CBD5C8] px-3 py-2.5 font-normal bg-white">{CROPS.map((c) => <option key={c}>{c}</option>)}</select></label>
+              <label>{hi ? 'बुवाई की तारीख' : 'Sowing date'}<input type="date" value={form.sowingDate} onChange={(e) => setForm({ ...form, sowingDate: e.target.value })} className="w-full mt-1 rounded-lg border border-[#CBD5C8] px-3 py-2.5 font-normal" /></label>
             </div>
+            {err && <p className="text-sm font-semibold text-rose-600">{err}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => { setAdding(false); setDraft([]); setErr(''); }} className="px-5 py-3 rounded-xl border border-[#CBD5C8] font-bold">{hi ? 'रद्द करें' : 'Cancel'}</button>
+              <button onClick={save} disabled={draft.length < 3} className="flex-1 py-3 rounded-xl bg-[#14532D] text-white font-bold disabled:opacity-40">{hi ? 'खेत सेव करें' : 'Save field'}</button>
+            </div>
+          </section>
+        )}
+
+        {!adding && loaded && !fields.length && (
+          <div className="rounded-2xl bg-white border border-dashed border-[#86B96B] p-10 text-center space-y-3">
+            <MapPin className="w-10 h-10 mx-auto text-[#228B52]" />
+            <p className="font-semibold">{hi ? 'अभी कोई खेत नहीं जुड़ा' : 'No field added yet'}</p>
+            <p className="text-sm text-[#66746A]">{hi ? '"खेत जोड़ें" दबाकर अपना खेत नक्शे पर बनाएँ।' : 'Press "Add field" and draw your field on the map.'}</p>
           </div>
+        )}
 
-          {/* Pump Automation Safety Confirmation Modal */}
-          {showPumpSafetyModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-              <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-2xl border border-[#E2E8DF] space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-amber-600" />
-                </div>
+        {!adding && field && (
+          <>
+            {fields.length > 1 && <div className="flex gap-2 overflow-x-auto pb-1">{fields.map((f) => <button key={f.id} onClick={() => setSel(f.id)} className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold border ${f.id === sel ? 'bg-[#14532D] text-white border-[#14532D]' : 'bg-white border-[#CBD5C8]'}`}>{f.name}</button>)}</div>}
 
-                <div>
-                  <h3 className="text-base font-extrabold text-[#14532D]">
-                    {language === 'hi' ? 'सिंचाई मोटर सुरक्षा प्रमाणीकरण' : 'Manual Motor Authorization Check'}
-                  </h3>
-                  <p className="text-xs text-[#66746A] mt-1 leading-relaxed">
-                    {language === 'hi'
-                      ? 'क्या आपने खेत की क्यारियों और नोजल की भौतिक जांच कर ली है? शुक्रवार को 65% बारिश का अनुमान है, यदि आप अभी सिंचाई करते हैं तो जलभराव हो सकता है।'
-                      : 'Have you verified field drains and lateral valves? Note: Rain is forecast for Friday. Running irrigation now may risk root waterlogging.'}
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#F8F7F0] text-xs space-y-1 text-[#17251D]">
-                  <div className="flex justify-between">
-                    <span>Field:</span> <span className="font-bold">{currentField.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Current Moisture:</span> <span className="font-bold text-amber-700">{telemetry.soilMoisturePercent}%</span>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setShowPumpSafetyModal(false)}
-                    className="flex-1 py-2 rounded-xl border border-[#E2E8DF] text-xs font-bold text-[#66746A] hover:bg-[#F8F7F0]"
-                  >
-                    Cancel / Postpone
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPumpConfirmed(true);
-                      setShowPumpSafetyModal(false);
-                      addToast('success', 'Motor Authorized', 'Irrigation solenoid valve turned ON for 45 minutes.');
-                    }}
-                    className="flex-1 py-2 rounded-xl bg-[#14532D] hover:bg-[#123B2A] text-white text-xs font-bold"
-                  >
-                    Confirm & Start Pump
-                  </button>
+            <section className="rounded-2xl bg-white border border-[#E2E8DF] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div><p className="font-black text-lg text-[#14532D]">{field.name}</p><p className="text-xs text-[#66746A]">{field.crop} · {field.areaAcre} {hi ? 'एकड़' : 'acre'}{an?.daysAfterSowing != null ? ` · ${an.daysAfterSowing} ${hi ? 'दिन की फसल' : 'days old'}` : ''}</p></div>
+                <div className="flex gap-1">
+                  <button onClick={() => analyse(field.id, true)} title="Refresh" className="p-2 rounded-lg hover:bg-[#F1F3EE]"><RefreshCw className={`w-4 h-4 ${anBusy ? 'animate-spin' : ''}`} /></button>
+                  <button onClick={() => remove(field.id)} title="Delete" className="p-2 rounded-lg hover:bg-rose-50 text-rose-600"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
-            </div>
-          )}
-        </main>
+              <FieldMap ring={field.ring} overlayUrl={showMap && an?.satellite.available ? `/api/fields/${field.id}/ndvi-image` : null} />
+              {an?.satellite.available && (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <button onClick={() => setShowMap((v) => !v)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#CBD5C8] font-semibold"><Layers className="w-3.5 h-3.5" /> {showMap ? (hi ? 'सामान्य फ़ोटो' : 'Plain photo') : (hi ? 'फसल की सेहत का रंग' : 'Crop health colours')}</button>
+                  <span className="flex items-center gap-1.5">{hi ? 'कमज़ोर' : 'Weak'} {['#a50026', '#f46d43', '#fee08b', '#a6d96a', '#1a9850'].map((c) => <i key={c} className="w-5 h-2.5 rounded-sm" style={{ background: c }} />)} {hi ? 'स्वस्थ' : 'Healthy'}</span>
+                </div>
+              )}
+            </section>
+
+            {anBusy && <div className="h-40 rounded-2xl bg-white border border-[#E2E8DF] animate-pulse" />}
+
+            {an && !anBusy && (
+              <>
+                {notConfigured && <div className="rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm">{hi ? 'सैटेलाइट की चाबी (COPERNICUS) अभी नहीं जुड़ी है, इसलिए फसल की सेहत का नक्शा नहीं दिख रहा। नीचे मिट्टी और मौसम का असली डेटा है।' : 'Satellite keys (COPERNICUS) are not added yet, so crop-health maps are off. Real soil and weather data is shown below.'}</div>}
+                {an.notes.filter((n) => n.startsWith('satellite:')).map((n) => <div key={n} className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs break-words">{n}</div>)}
+
+                <section className="rounded-2xl bg-white border border-[#E2E8DF] p-5 space-y-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className={`px-3 py-1.5 rounded-full text-sm font-black ${h[0]}`}>{hi ? h[1] : h[2]}</span>
+                    {an.health.score !== null && <span className="text-3xl font-black text-[#14532D]">{an.health.score}<span className="text-base text-[#66746A]">/100</span></span>}
+                    {an.health.label !== 'unknown' && <span className="text-sm font-semibold text-[#44524A]">{an.health.trend === 'up' ? (hi ? '↑ बढ़ रही है' : '↑ improving') : an.health.trend === 'down' ? (hi ? '↓ गिर रही है' : '↓ declining') : (hi ? '→ स्थिर' : '→ steady')}</span>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    {([
+                      [Satellite, hi ? 'हरियाली (NDVI)' : 'Greenness (NDVI)', last ? last.ndvi.toFixed(2) : '—'],
+                      [Waves, hi ? 'फसल में पानी (NDMI)' : 'Crop water (NDMI)', last ? last.ndmi.toFixed(2) : '—'],
+                      [Droplets, hi ? 'मिट्टी की नमी' : 'Soil moisture', an.soil ? `${an.soil.soilTopPct}%` : '—'],
+                    ] as const).map(([I, l, v]) => <div key={l} className="rounded-xl bg-[#F8F7F0] p-3"><I className="w-5 h-5 mx-auto text-[#228B52]" /><p className="mt-1 text-xl font-black text-[#14532D]">{v}</p><p className="text-[11px] text-[#66746A] leading-tight">{l}</p></div>)}
+                  </div>
+                  {an.soil && <p className="text-sm text-[#44524A]">{hi ? 'पिछले 7 दिन की बारिश' : 'Rain past 7 days'}: <b>{an.soil.rainPast7Mm} mm</b> · {hi ? 'अगले 7 दिन' : 'next 7 days'}: <b>{an.soil.rainNext7Mm} mm</b> · {hi ? 'जड़ों के पास नमी' : 'root-zone moisture'}: <b>{an.soil.soilRootPct}%</b></p>}
+                  {an.satellite.series.length > 1 && <div><p className="text-sm font-bold mb-1">{hi ? 'हरियाली का ग्राफ़ (पिछले ~4 महीने)' : 'Greenness trend (last ~4 months)'}</p><Trend s={an.satellite.series} /></div>}
+                </section>
+
+                {an.advice && (
+                  <section className="rounded-2xl bg-white border border-[#E2E8DF] p-5 space-y-3">
+                    <h2 className="flex items-center gap-2 font-black text-[#14532D]"><Sparkles className="w-5 h-5 text-[#228B52]" /> {hi ? 'आपके खेत के लिए सलाह' : 'Advice for your field'}</h2>
+                    <p className="text-sm font-semibold">{an.advice.summary}</p>
+                    {an.advice.actions?.map((a, i) => <div key={i} className={`rounded-xl border p-3 ${PRI[a.priority] ?? PRI.low}`}><p className="font-bold text-sm">{a.title}</p><p className="text-sm text-[#44524A]">{a.text}</p></div>)}
+                  </section>
+                )}
+                <p className="text-center text-[11px] text-[#66746A]">{hi ? 'डेटा: Sentinel-2 (ESA), Open-Meteo। सैटेलाइट हर ~5 दिन में नई फ़ोटो देता है; बादल हों तो पुरानी दिखती है।' : 'Data: Sentinel-2 (ESA), Open-Meteo. Satellite refreshes every ~5 days; cloudy days show older scenes.'}</p>
+              </>
+            )}
+          </>
+        )}
       </div>
-
-      <Footer />
-    </div>
+    </AppShell>
   );
 }
