@@ -121,3 +121,36 @@ export async function* streamGemini(o: Opts): AsyncGenerator<string> {
 
 // Remove markdown so speech and plain bubbles sound clean.
 export const plain = (s: string) => s.replace(/\*\*/g, '').replace(/[*_`#]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+
+// One-shot call that returns JSON; accepts images. Used by crop disease detection.
+export async function geminiJson(system: string, parts: object[]): Promise<unknown> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is not set');
+  const models = [process.env.GEMINI_MODEL, ...DEFAULT_MODELS].filter((m, i, a): m is string => Boolean(m) && a.indexOf(m) === i);
+  let last = 'unknown';
+  for (const model of models) {
+    for (const think of [true, false]) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts }],
+          generationConfig: { maxOutputTokens: 3000, temperature: 0.3, responseMimeType: 'application/json', ...(think ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
+        }),
+        signal: AbortSignal.timeout(40_000),
+      });
+      if (res.ok) {
+        const t = textOf(await res.json()).replace(/```json|```/g, '').trim();
+        return JSON.parse(t);
+      }
+      const e = await res.json().catch(() => null);
+      const why = String(e?.error?.message ?? '').slice(0, 140);
+      last = `${model}: ${why}`;
+      if (res.status === 404) break;
+      if (res.status === 429) throw new Error('Gemini free limit reached. Wait a minute.');
+      if (res.status === 401 || res.status === 403) throw new Error('Gemini key rejected');
+    }
+  }
+  throw new Error(`Gemini failed (${last})`);
+}
