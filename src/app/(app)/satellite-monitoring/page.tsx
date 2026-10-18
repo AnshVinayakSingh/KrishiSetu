@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useLocation } from '@/context/LocationContext';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import MobileMenu from '@/components/layout/MobileMenu';
@@ -28,6 +29,7 @@ import {
 
 export default function SatelliteMonitoringPage() {
   const { language, t } = useLanguage();
+  const { coords } = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedField, setSelectedField] = useState('field-1');
   const [telemetry, setTelemetry] = useState<SensorTelemetry>(INITIAL_SENSOR_TELEMETRY);
@@ -75,7 +77,7 @@ export default function SatelliteMonitoringPage() {
   const fetchTelemetry = async () => {
     setIsLoadingTelemetry(true);
     try {
-      const res = await fetch('/api/sensor-data');
+      const res = await fetch(coords ? `/api/sensor-data?lat=${coords.lat}&lon=${coords.lon}` : '/api/sensor-data');
       const data = await res.json();
       if (data.success && data.telemetry) {
         setTelemetry(data.telemetry);
@@ -86,6 +88,15 @@ export default function SatelliteMonitoringPage() {
       setIsLoadingTelemetry(false);
     }
   };
+
+  // Load real soil data once we know the location, then refresh every 10 min.
+  useEffect(() => {
+    if (!coords) return;
+    fetchTelemetry();
+    const id = setInterval(fetchTelemetry, 10 * 60 * 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coords]);
 
   const handleSimulateMoisture = async (newMoisture: number) => {
     try {

@@ -56,7 +56,7 @@ export default function WeatherCard() {
     if (!coords) return;
     const load = () =>
       fetch(`/api/weather?lat=${coords.lat}&lon=${coords.lon}`)
-        .then((r) => r.json())
+        .then((r) => { if (!r.ok) throw new Error('weather'); return r.json(); })
         .then((d) => { setData(d); setError(false); })
         .catch(() => setError(true));
     load();
